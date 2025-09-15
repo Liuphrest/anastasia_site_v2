@@ -2,10 +2,201 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { FiX, FiChevronLeft, FiChevronRight, FiArrowUp, FiMessageSquare } from 'react-icons/fi';
 import { FaTelegramPlane } from 'react-icons/fa';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Text } from '@react-three/drei';
+import * as THREE from 'three';
+import LetterVortex from './LetterVortex';
 
 //================================================================================
 // Reusable Components & Hooks
 //================================================================================
+
+// 3D orbiting letters (A–Z) in three rings with different speeds
+const OrbitingLetters = () => {
+  const letters = useMemo(() => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), []);
+  const ringRefs = [useRef(), useRef(), useRef()];
+  const baseSpeed = 0.36; // rad/sec baseline
+
+  useFrame((_, delta) => {
+    const speeds = [baseSpeed * 0.95, baseSpeed, baseSpeed * 1.07];
+    ringRefs.forEach((ref, i) => {
+      if (ref.current) ref.current.rotation.z += speeds[i] * delta;
+    });
+  });
+
+  const renderRing = (ringIndex) => (
+    <group ref={ringRefs[ringIndex]} key={`ring-${ringIndex}`}>
+      {letters.map((letter, index) => {
+        if (index % 3 !== ringIndex) return null;
+        const angle = (index / letters.length) * Math.PI * 2;
+        const baseRadius = 0.6 + ringIndex * 0.18;
+        // Compact radii and avoid canvas edge; inner/outer slightly closer
+        let r = baseRadius * 0.8;
+        if (ringIndex === 0 || ringIndex === 2) r *= 0.9;
+        const x = Math.cos(angle) * r;
+        const y = Math.sin(angle) * r;
+        const z = Math.sin(index) * 0.12;
+        const randomOffset = (Math.sin(index * 12.9374) - 0.5) * 2 * (Math.PI / 3);
+        const hue = 190 + index * 4;
+        return (
+          <group key={index} position={[x, y, z]} rotation={[0, 0, angle + randomOffset]}>
+            <Text fontSize={0.126} anchorX="center" anchorY="middle" font="/fonts/ShadowsIntoLight-Regular.ttf">
+              {letter}
+              <meshStandardMaterial
+                color={new THREE.Color().setHSL((hue % 360) / 360, 0.7, 0.7)}
+                emissive={new THREE.Color().setHSL(((hue + 10) % 360) / 360, 0.6, 0.35)}
+                emissiveIntensity={0.85}
+              />
+            </Text>
+          </group>
+        );
+      })}
+    </group>
+  );
+
+  return (
+    <group>
+      {renderRing(0)}
+      {renderRing(1)}
+      {renderRing(2)}
+    </group>
+  );
+};
+
+// Local 2D vortex matching site style, slower, used behind photo
+const LocalVortexCanvas = ({ count = 280 }) => {
+  const canvasRef = useRef(null);
+  const starsRef = useRef([]);
+  const startedAt = useRef(performance.now());
+
+  const resize = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.parentElement?.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect?.width || 320));
+    const h = Math.max(1, Math.floor(rect?.height || 320));
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+
+  const makeStars = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const cx = w / 2;
+    const cy = h / 2;
+    const amount = Math.round(count);
+    const arr = new Array(amount).fill(0).map(() => {
+      const x0 = Math.random() * w;
+      const y0 = Math.random() * h;
+      const vx = x0 - cx;
+      const vy = y0 - cy;
+      const baseAngle = Math.atan2(vy, vx);
+      const baseRadius = Math.hypot(vx, vy);
+      return {
+        baseAngle,
+        baseRadius,
+        r: 0.5 + Math.random() * 1.2,
+        baseAlpha: 0.45 + Math.random() * 0.45,
+        angVel: (0.003 + Math.random() * 0.012) * (Math.random() < 0.5 ? -1 : 1),
+        wobbleAmp: 1.6 + Math.random() * 3.5,
+        wobbleFreq: 0.18 + Math.random() * 0.5,
+        wobblePhase: Math.random() * Math.PI * 2,
+        pulseFreq: 0.35 + Math.random() * 0.6,
+        pulsePhase: Math.random() * Math.PI * 2,
+        personalSpin: (Math.random() * 0.01) * (Math.random() < 0.5 ? -1 : 1),
+        tint: Math.random(),
+      };
+    });
+    starsRef.current = arr;
+  };
+
+  React.useEffect(() => {
+    resize();
+    makeStars();
+    const onResize = () => { resize(); makeStars(); };
+    window.addEventListener('resize', onResize);
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let rafId;
+    const render = (now) => {
+      const t = (now - startedAt.current) / 1000;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      const cx = w / 2;
+      const cy = h / 2;
+      ctx.clearRect(0, 0, w, h);
+      const globalAngle = t * 0.0015; // slower
+      for (const s of starsRef.current) {
+        const angle = s.baseAngle + globalAngle + t * s.angVel + t * s.personalSpin;
+        const wobble = s.wobbleAmp * Math.sin(t * s.wobbleFreq + s.wobblePhase);
+        const r = Math.max(0, s.baseRadius + wobble);
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        const pulse = 0.6 + 0.4 * Math.sin(t * s.pulseFreq + s.pulsePhase);
+        const c1 = `rgba(76,29,149,${0.08 * s.baseAlpha * pulse})`;
+        const c2 = `rgba(124,58,237,${0.12 * s.baseAlpha * pulse})`;
+        ctx.fillStyle = Math.random() < s.tint ? c2 : c1;
+        ctx.beginPath();
+        ctx.arc(x, y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      rafId = requestAnimationFrame(render);
+    };
+    rafId = requestAnimationFrame(render);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [count]);
+
+  return <canvas ref={canvasRef} className="w-full h-full block" />;
+};
+
+// Knowledge Portal: photo + 3D letters + vortex, all in one place
+const KnowledgePortal = ({ profileImage }) => (
+  <div className="relative w-full max-w-sm h-auto overflow-visible">
+    <LetterVortex />
+    {/* Profile Image */}
+    <div className="relative z-10 p-3 md:p-4">
+      <img
+        src={profileImage}
+        alt="������� ��室쪮"
+        className="relative w-full h-auto object-cover rounded-full shadow-2xl shadow-black/50"
+      />
+    </div>
+    {/* Soft radial background glow behind photo (bottom-most) */}
+    <div className="absolute inset-0 -z-40 opacity-30" style={{
+      background: 'radial-gradient(ellipse 85% 92% at center, rgba(124, 58, 237, 0.12) 0%, rgba(45, 212, 191, 0.08) 35%, transparent 78%)',
+      borderRadius: '9999px'
+    }} />
+  </div>
+);
+
+// --- Brand name that changes color on scroll ---
+const BrandNameChanging = () => {
+  const { scrollYProgress } = useScroll();
+  // page-based color stops: 0%, 30%, 65%, 100%
+  const color = useTransform(
+    scrollYProgress,
+    [0, 0.3, 0.65, 1],
+    ['#3e91f7', '#F0ABFC', '#FB923C', '#A855F7']
+  );
+  return (
+    <motion.h1
+      style={{ color }}
+      className="text-xl md:text-2xl font-bold tracking-wide transition-colors duration-300 brand-glow"
+    >
+      <span style={{ fontFamily: 'BrandFont, Manrope, sans-serif' }}>Anastasia Prikhodko</span>
+    </motion.h1>
+  );
+};
 
 // --- Custom Hook for simplified scroll-based transform ---
 const useScrollTransform = (ref, from, to) => {
@@ -481,16 +672,12 @@ const observer = new IntersectionObserver((entries) => {
           className="fixed top-0 w-full bg-[#0B0D17]/80 backdrop-blur-lg border-b border-white/10 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-20">
-              <motion.div 
-  whileHover={{ scale: 1.05 }} 
-  className={`flex items-center cursor-pointer transition-all duration-300 ${
-    activeSection === 'home' ? 'text-glow' : ''
-  }`} 
+              <motion.div
+  whileHover={{ scale: 1.05 }}
+  className="flex items-center cursor-pointer transition-all duration-300"
   onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
 >
-                <h1 className={`text-xl md:text-2xl font-bold tracking-wide transition-all duration-300 ${
-  activeSection === 'home' ? 'name-glow' : 'text-gray-300 hover:text-white'
-}`}>Anastasia Prihodko</h1>
+                <BrandNameChanging />
               </motion.div>
               <div className="hidden md:flex items-center space-x-8">
                 <NavLink id="about">Обо мне</NavLink>
@@ -531,7 +718,7 @@ const observer = new IntersectionObserver((entries) => {
           <SectionWrapper id="about" auroraColor="aurora-purple">
             <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
                 <motion.div className="relative flex justify-center" initial={{ opacity: 0, scale: 0.8 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, amount: 0.5 }} transition={{ duration: 0.8, type: 'spring' }}>
-                    <img src={profileImage} alt="Анастасия Приходько" className="relative w-full max-w-sm h-auto object-cover rounded-full shadow-2xl shadow-black/50"/>
+                    <KnowledgePortal profileImage={profileImage} />
                 </motion.div>
                 <motion.div variants={containerVariants} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.5 }}>
                     <motion.h2 variants={itemVariants} className="text-4xl sm:text-5xl font-bold text-white mb-6 text-glow">Строим мостики между языками и культурами</motion.h2>
@@ -860,3 +1047,4 @@ const BackToTopButton = ({ isVisible }) => (
 );
 
 export default App;
+
