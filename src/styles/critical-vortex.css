@@ -1,0 +1,36 @@
+/* Критические стили для предотвращения белого фона при загрузке */
+
+/* Глобальная защита всех canvas элементов */
+canvas {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Защита контейнеров вихря */
+.knowledge-portal-container,
+.knowledge-portal-container *,
+.transparent-canvas-container,
+.transparent-canvas-container * {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Специфичная защита для Three.js canvas */
+.transparent-canvas-container canvas,
+.transparent-canvas-container > div > canvas {
+  background: transparent !important;
+  background-color: transparent !important;
+  opacity: 1 !important;
+}
+
+/* Защита для 2D canvas с классом block */
+canvas.block {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Изначально скрываем компоненты до полной загрузки */
+.knowledge-portal-container:not(.loaded),
+.transparent-canvas-container:not(.loaded) {
+  visibility: hidden !important;
+}

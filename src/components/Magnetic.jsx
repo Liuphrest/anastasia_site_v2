@@ -6,8 +6,10 @@ const Magnetic = ({ children }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
 
   const handleMouse = (e) => {
+    const element = ref.current;
+    if (!element) return;
     const { clientX, clientY } = e;
-    const { height, width, left, top } = ref.current.getBoundingClientRect();
+    const { height, width, left, top } = element.getBoundingClientRect();
     setPosition({ x: clientX - (left + width / 2), y: clientY - (top + height / 2) });
   };
 

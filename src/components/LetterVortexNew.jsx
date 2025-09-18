@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -170,22 +170,43 @@ const AllLetters = ({ ringRadii = [1.35, 1.42, 1.5] }) => {
 };
 
 // Новый компонент LetterVortex все-в-одном
-const LetterVortexNew = ({ ringRadii = [1.35, 1.42, 1.5] }) => {
+const LetterVortexNew = React.memo(({ ringRadii = [1.35, 1.42, 1.5] }) => {
   const canvasRef = useRef();
-  
-  // Форсируем обновление при монтировании
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Задержка для плавного появления при первой отрисовке
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (canvasRef.current) {
-        canvasRef.current.style.transform = 'translate(-50%, -50%) translateZ(0)';
-      }
-    }, 16); // 60 FPS
-    
-    return () => clearInterval(interval);
+    const timer = setTimeout(() => {
+      setIsLoaded(true);
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, []);
-  
+
+  // Поддерживаем transform и прозрачность канваса после обновлений
+  useEffect(() => {
+    const applyTransform = () => {
+      if (!canvasRef.current) {
+        return;
+      }
+      canvasRef.current.style.transform = 'translate(-50%, -50%) translateZ(0)';
+      canvasRef.current.style.backgroundColor = 'transparent';
+    };
+
+    applyTransform();
+    const interval = window.setInterval(applyTransform, 250);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-visible z-20">
+    <div
+      className="absolute inset-0 pointer-events-none overflow-visible z-20"
+      style={{
+        opacity: isLoaded ? 1 : 0,
+        transition: 'opacity 0.3s ease-in-out'
+      }}
+    >
       {/* Background vortex */}
       <div
         className="absolute pointer-events-none z-20"
@@ -194,7 +215,8 @@ const LetterVortexNew = ({ ringRadii = [1.35, 1.42, 1.5] }) => {
           left: '50%',
           width: '240%',
           height: '240%',
-          transform: 'translate(-50%, -50%)'
+          transform: 'translate(-50%, -50%)',
+          background: 'transparent'
         }}
       >
         <VortexBackgroundCanvas count={300} />
@@ -211,7 +233,8 @@ const LetterVortexNew = ({ ringRadii = [1.35, 1.42, 1.5] }) => {
           height: '350%',
           transform: 'translate(-50%, -50%)',
           pointerEvents: 'auto',
-          willChange: 'transform'
+          willChange: 'transform',
+          background: 'transparent'
         }}
       >
         <Canvas
@@ -222,11 +245,20 @@ const LetterVortexNew = ({ ringRadii = [1.35, 1.42, 1.5] }) => {
             height: '100%', 
             background: 'transparent'
           }}
-          gl={{ 
-            alpha: true, 
+          gl={{
+            alpha: true,
             antialias: true,
             powerPreference: "high-performance",
-            preserveDrawingBuffer: false
+            preserveDrawingBuffer: false,
+            premultipliedAlpha: false
+          }}
+          onCreated={({ gl, scene }) => {
+            gl.setClearColor('transparent', 0);
+            gl.setClearAlpha(0);
+            if (gl.domElement?.style) {
+              gl.domElement.style.backgroundColor = 'transparent';
+            }
+            scene.background = null;
           }}
         >
           <ambientLight intensity={0.32} />
@@ -238,6 +270,6 @@ const LetterVortexNew = ({ ringRadii = [1.35, 1.42, 1.5] }) => {
       </div>
     </div>
   );
-};
+});
 
 export default LetterVortexNew;

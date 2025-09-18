@@ -1,5 +1,7 @@
+import { CONFIG } from '../constants/config';
+
 export const getExperienceYears = () => {
-  const startYear = 2019;
+  const startYear = CONFIG.EXPERIENCE_START_YEAR;
   const currentYear = new Date().getFullYear();
   return currentYear - startYear + 1;
 };

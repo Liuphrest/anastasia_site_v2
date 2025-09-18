@@ -54,66 +54,6 @@ export const customTranslateY = {
   }
 };
 
-// Общие отступы для секций (стандартизированные)
-export const sectionSpacing = {
-  container: {
-    paddingY: existingSpacing.common.py24, // py-24
-    paddingX: 16, // px-4
-    minHeight: '100vh',
-  },
-
-  header: {
-    marginBottom: existingSpacing.common.mb16, // mb-16
-  },
-
-  content: {
-    maxWidth: '1280px', // max-w-7xl для большинства секций
-    margin: '0 auto',
-  },
-
-  grid: {
-    gap: 32, // gap-8
-    gapLarge: 48, // gap-12 (About section)
-  }
-};
-
-// Анимационные настройки для framer-motion
-export const animationConfig = {
-  // Базовые варианты для контейнеров
-  container: {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        delayChildren: 0.3,
-        staggerChildren: 0.2
-      }
-    }
-  },
-
-  // Базовые варианты для элементов
-  item: {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1
-    }
-  },
-
-  // Стандартные начальные смещения
-  initialOffset: {
-    y: 50,
-    opacity: 0
-  },
-
-  // Конечные позиции
-  finalPosition: {
-    y: 0,
-    opacity: 1
-  }
-};
-
-// Настройки визуального прогресса по секциям (можно подстроить под макет)
 export const progressTuning = {
   thresholdVh: 0.5,      // доля высоты вьюпорта вокруг якоря (фоллбэк)
   rangePaddingPx: 96,    // смягчение краёв диапазона секции (шире окно)

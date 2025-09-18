@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiArrowUp } from 'react-icons/fi';
 
-const BackToTopButton = ({ isVisible }) => (
+const BackToTopButton = React.memo(({ isVisible }) => (
   <AnimatePresence>{isVisible && (
     <motion.button
       initial={{ opacity: 0, y: 50 }}
@@ -14,6 +14,6 @@ const BackToTopButton = ({ isVisible }) => (
     </motion.button>)
   }
   </AnimatePresence>
-);
+));
 
 export default BackToTopButton;

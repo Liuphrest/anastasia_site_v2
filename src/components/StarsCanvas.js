@@ -1,33 +1,45 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
+import { CONFIG } from '../constants/config';
 
-const StarsCanvas = React.memo(function StarsCanvas({ count = 240 }) {
+const StarsCanvas = React.memo(function StarsCanvas({ count = CONFIG.STARS_COUNT }) {
   const canvasRef = useRef(null);
   const starsRef = useRef([]);
   const rafRef = useRef(null);
   const startedAt = useRef(performance.now());
 
-  const resize = () => {
+  const resize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const { innerWidth: w, innerHeight: h } = window;
     canvas.width = Math.floor(w * dpr);
     canvas.height = Math.floor(h * dpr);
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
     const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  };
+    if (ctx) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+  }, []);
 
-  const makeStars = () => {
+  const makeStars = useCallback(() => {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const cx = w / 2;
     const cy = h / 2;
 
-    const amount = Math.round(count * Math.min(1.2, Math.max(0.7, (w * h) / (1280 * 720))));
-    const arr = new Array(amount).fill(0).map(() => {
+    // Адаптивное количество звезд по производительности устройства
+    let adaptiveCount;
+    if (w <= CONFIG.VIEWPORT_THRESHOLDS.MOBILE) {
+      adaptiveCount = CONFIG.PERFORMANCE.STARS_MOBILE;
+    } else if (w <= CONFIG.VIEWPORT_THRESHOLDS.TABLET) {
+      adaptiveCount = CONFIG.PERFORMANCE.STARS_TABLET;
+    } else {
+      adaptiveCount = count || CONFIG.PERFORMANCE.STARS_DESKTOP;
+    }
+
+    const amount = Math.round(adaptiveCount * Math.min(1.2, Math.max(0.7, (w * h) / (1280 * 720))));
+    starsRef.current = Array.from({ length: amount }, () => {
       const x0 = Math.random() * w;
       const y0 = Math.random() * h;
       const vx = x0 - cx;
@@ -38,7 +50,7 @@ const StarsCanvas = React.memo(function StarsCanvas({ count = 240 }) {
       let glowColor;
 
       if (glowType < 0.4) {
-        // Белое мерцание (40%)
+        // Белое свечение (40%)
         glowColor = { r: 255, g: 255, b: 255 };
       } else if (glowType < 0.7) {
         // Голубой цвет (30%)
@@ -62,7 +74,7 @@ const StarsCanvas = React.memo(function StarsCanvas({ count = 240 }) {
         glowMultiplier = 11 + Math.random() * 6; // 11-17x
       }
 
-      // Мерцание только у 20% звёзд
+      // Мерцание только у 20% звезд
       const shouldTwinkle = Math.random() < 0.2;
 
       return {
@@ -74,7 +86,7 @@ const StarsCanvas = React.memo(function StarsCanvas({ count = 240 }) {
         wobbleAmp: 2 + Math.random() * 6,
         wobbleFreq: 0.2 + Math.random() * 0.7,
         wobblePhase: Math.random() * Math.PI * 2,
-        pulseFreq: shouldTwinkle ? (0.5 + Math.random() * 0.8) : 0,
+        pulseFreq: shouldTwinkle ? 0.5 + Math.random() * 0.8 : 0,
         pulsePhase: Math.random() * Math.PI * 2,
         personalSpin: (Math.random() * 0.015) * (Math.random() < 0.5 ? -1 : 1),
         tint: Math.random(),
@@ -83,17 +95,27 @@ const StarsCanvas = React.memo(function StarsCanvas({ count = 240 }) {
         shouldTwinkle,
       };
     });
-    starsRef.current = arr;
-  };
+  }, [count]);
 
   useEffect(() => {
-    resize();
-    makeStars();
-    const onResize = () => { resize(); makeStars(); };
-    window.addEventListener('resize', onResize);
-
     const canvas = canvasRef.current;
+    if (!canvas) {
+      return undefined;
+    }
     const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return undefined;
+    }
+
+    startedAt.current = performance.now();
+
+    const handleResize = () => {
+      resize();
+      makeStars();
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
 
     const render = (now) => {
       const t = (now - startedAt.current) / 1000;
@@ -107,25 +129,25 @@ const StarsCanvas = React.memo(function StarsCanvas({ count = 240 }) {
       for (const s of starsRef.current) {
         const angle = s.baseAngle + globalAngle + t * s.angVel + t * s.personalSpin;
         const wobble = s.wobbleAmp * Math.sin(t * s.wobbleFreq + s.wobblePhase);
-        const r = Math.max(0, s.baseRadius + wobble);
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r;
+        const radius = Math.max(0, s.baseRadius + wobble);
+        const x = cx + Math.cos(angle) * radius;
+        const y = cy + Math.sin(angle) * radius;
 
-        const pulse = s.shouldTwinkle ? (0.6 + 0.6 * Math.sin(t * s.pulseFreq + s.pulsePhase)) : 1;
-        const haloR = (s.r * s.glowMultiplier) * pulse;
+        const pulse = s.shouldTwinkle ? 0.6 + 0.6 * Math.sin(t * s.pulseFreq + s.pulsePhase) : 1;
+        const haloR = s.r * s.glowMultiplier * pulse;
 
         const { r: gR, g: gG, b: gB } = s.glowColor;
-        const g = ctx.createRadialGradient(x, y, 0, x, y, haloR);
-        g.addColorStop(0, `rgba(${gR}, ${gG}, ${gB}, ${0.6 * s.baseAlpha * pulse})`);
-        g.addColorStop(0.3, `rgba(${gR}, ${gG}, ${gB}, ${0.4 * s.baseAlpha * pulse})`);
-        g.addColorStop(0.7, `rgba(${gR}, ${gG}, ${gB}, ${0.1 * s.baseAlpha * pulse})`);
-        g.addColorStop(1, `rgba(${gR}, ${gG}, ${gB}, 0)`);
-        ctx.fillStyle = g;
+        const gradient = ctx.createRadialGradient(x, y, 0, x, y, haloR);
+        gradient.addColorStop(0, `rgba(${gR}, ${gG}, ${gB}, ${0.6 * s.baseAlpha * pulse})`);
+        gradient.addColorStop(0.3, `rgba(${gR}, ${gG}, ${gB}, ${0.4 * s.baseAlpha * pulse})`);
+        gradient.addColorStop(0.7, `rgba(${gR}, ${gG}, ${gB}, ${0.1 * s.baseAlpha * pulse})`);
+        gradient.addColorStop(1, `rgba(${gR}, ${gG}, ${gB}, 0)`);
+        ctx.fillStyle = gradient;
         ctx.beginPath();
         ctx.arc(x, y, haloR, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(255,255,255,${Math.min(1, 1.0 * s.baseAlpha * (0.95 + 0.25 * pulse))})`;
+        ctx.fillStyle = `rgba(255,255,255,${Math.min(1, s.baseAlpha * (0.95 + 0.25 * pulse))})`;
         ctx.beginPath();
         ctx.arc(x, y, s.r, 0, Math.PI * 2);
         ctx.fill();
@@ -135,14 +157,14 @@ const StarsCanvas = React.memo(function StarsCanvas({ count = 240 }) {
     };
 
     rafRef.current = requestAnimationFrame(render);
+
     return () => {
-      window.removeEventListener('resize', onResize);
-      cancelAnimationFrame(rafRef.current);
+      window.removeEventListener('resize', handleResize);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [count]);
+  }, [resize, makeStars]);
 
   return <canvas className="starry-canvas" ref={canvasRef} />;
 });
 
 export default StarsCanvas;
-

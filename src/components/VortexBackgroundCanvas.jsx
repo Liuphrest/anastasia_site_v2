@@ -1,7 +1,7 @@
 import React from 'react';
 
 // Background 2D vortex canvas (particles)
-const VortexBackgroundCanvas = ({ count = 300 }) => {
+const VortexBackgroundCanvas = React.memo(({ count = 300 }) => {
   const canvasRef = React.useRef(null);
   const starsRef = React.useRef([]);
   const startedAt = React.useRef(performance.now());
@@ -15,10 +15,14 @@ const VortexBackgroundCanvas = ({ count = 300 }) => {
     const h = Math.max(1, Math.floor(rect?.height || 280));
     canvas.width = Math.floor(w * dpr);
     canvas.height = Math.floor(h * dpr);
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
     const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (ctx) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Устанавливаем прозрачный фон сразу
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
   }, []);
 
   const makeStars = React.useCallback(() => {
@@ -29,7 +33,7 @@ const VortexBackgroundCanvas = ({ count = 300 }) => {
     const cx = w / 2;
     const cy = h / 2;
     const amount = Math.round(count);
-    const arr = new Array(amount).fill(0).map(() => {
+    starsRef.current = Array.from({ length: amount }, () => {
       const x0 = Math.random() * w;
       const y0 = Math.random() * h;
       const vx = x0 - cx;
@@ -51,25 +55,36 @@ const VortexBackgroundCanvas = ({ count = 300 }) => {
         tint: Math.random(),
       };
     });
-    starsRef.current = arr;
   }, [count]);
 
   React.useEffect(() => {
-    resize();
-    makeStars();
-    const onResize = () => { resize(); makeStars(); };
-    window.addEventListener('resize', onResize);
     const canvas = canvasRef.current;
+    if (!canvas) {
+      return undefined;
+    }
     const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return undefined;
+    }
+
+    startedAt.current = performance.now();
+    const handleResize = () => {
+      resize();
+      makeStars();
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
 
     let ro;
-    if (canvas && canvas.parentElement && 'ResizeObserver' in window) {
+    if (canvas.parentElement && 'ResizeObserver' in window) {
       ro = new ResizeObserver(() => {
         resize();
         makeStars();
       });
       ro.observe(canvas.parentElement);
     }
+
     let rafId;
     const render = (now) => {
       const t = (now - startedAt.current) / 1000;
@@ -77,15 +92,14 @@ const VortexBackgroundCanvas = ({ count = 300 }) => {
       const h = canvas.clientHeight;
       const cx = w / 2;
       const cy = h / 2;
-      const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, w, h);
       const globalAngle = t * 0.0015;
       for (const s of starsRef.current) {
         const angle = s.baseAngle + globalAngle + t * s.angVel + t * s.personalSpin;
         const wobble = s.wobbleAmp * Math.sin(t * s.wobbleFreq + s.wobblePhase);
-        const r = Math.max(0, s.baseRadius + wobble);
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r;
+        const radius = Math.max(0, s.baseRadius + wobble);
+        const x = cx + Math.cos(angle) * radius;
+        const y = cy + Math.sin(angle) * radius;
         const pulse = 0.6 + 0.4 * Math.sin(t * s.pulseFreq + s.pulsePhase);
         const c1 = `rgba(76,29,149,${0.18 * s.baseAlpha * pulse})`;
         const c2 = `rgba(124,58,237,${0.28 * s.baseAlpha * pulse})`;
@@ -96,16 +110,25 @@ const VortexBackgroundCanvas = ({ count = 300 }) => {
       }
       rafId = requestAnimationFrame(render);
     };
+
     rafId = requestAnimationFrame(render);
+
     return () => {
-      window.removeEventListener('resize', onResize);
-      if (ro) try { ro.disconnect(); } catch {}
-      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', handleResize);
+      if (ro) {
+        try {
+          ro.disconnect();
+        } catch (_) {
+          // ignore observer disconnect errors
+        }
+      }
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
     };
   }, [resize, makeStars]);
 
   return <canvas ref={canvasRef} className="w-full h-full block" style={{ background: 'transparent' }} />;
-};
+});
 
 export default VortexBackgroundCanvas;
-
