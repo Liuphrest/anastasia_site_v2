@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Manrope font for hero title only */
+.hero-title-font {
+  font-family: 'Manrope', sans-serif;
+}
